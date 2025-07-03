@@ -15,7 +15,6 @@ If the source_directory doesn't exist, or the target_directory already exists, t
 '''
 @app.command()
 def generate_previews(source_directory: Path, target_directory: Path, max_size: int):
-    
     # Check if source_directory exists
     if not os.path.isdir(source_directory):
         raise FileNotFoundError(f"Source directory '{source_directory}' does not exist.")
@@ -71,15 +70,38 @@ def clean_up_originals(source_directory: Path, target_directory: Path, raw_exten
             source_files.add(file_path.stem)
 
     # Check each file in target directory
-    files_removed = 0
-    removed_files = []
+    # First identify files to be removed
+    files_to_remove = []
+    total_files = 0
     for file_path in target_directory.iterdir():
         if (file_path.suffix.lower() == raw_extension.lower() or 
             file_path.suffix.lower() == compressed_extension.lower()):
+            total_files += 1
             if file_path.stem not in source_files:
-                removed_files.append(str(file_path.name))
-                file_path.unlink()
-                files_removed += 1
+                files_to_remove.append(file_path)
+
+    # Prompt user before deletion
+    if files_to_remove:
+        print(f"\nFound {len(files_to_remove)} files to remove out of {total_files} total files.")
+        print("\nFiles to be removed:")
+        for file_path in files_to_remove:
+            print(f"- {file_path.name}")
+        
+        response = input("\nDo you want to proceed with deletion? (y/N): ").lower()
+        if response != 'y':
+            print("Aborted. No files were deleted.")
+            return
+            
+        # Proceed with deletion
+        files_removed = 0
+        removed_files = []
+        for file_path in files_to_remove:
+            removed_files.append(str(file_path.name))
+            file_path.unlink()
+            files_removed += 1
+    else:
+        files_removed = 0
+        removed_files = []
 
     print(f"\n=== Cleanup Summary ===")
     print(f"Files removed: {files_removed}")
