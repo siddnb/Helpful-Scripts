@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
-
+import typer
 import subprocess
 import os
 import sys
+from pathlib import Path
 import time
+
+app = typer.Typer()
 
 '''
 This function takes all the images in a given directory and resizes them, adding these new smaller images
 to the target_directory.
 If the source_directory doesn't exist, or the target_directory already exists, throw an error
 '''
-def resize_images(source_directory, target_directory, size):
+@app.command()
+def generate_previews(source_directory: Path, target_directory: Path, max_size: int):
     
     # Check if source_directory exists
     if not os.path.isdir(source_directory):
@@ -31,8 +35,9 @@ def resize_images(source_directory, target_directory, size):
     for filename in os.listdir(source_directory):
         if filename.lower().endswith(image_extensions):
             dst_path = os.path.join(target_directory, filename)
-            # Resize the image in the target directory
-            command = ["sips", "-Z", str(size), os.path.join(source_directory, filename), "--out", dst_path]
+
+            # Copy and resize the image to the target directory
+            command = ["sips", "-Z", str(max_size), os.path.join(source_directory, filename), "--out", dst_path]
             subprocess.run(command, check=True)
             converted_count += 1
     
@@ -46,18 +51,42 @@ def resize_images(source_directory, target_directory, size):
     if converted_count > 0:
         print(f"Average time per image: {elapsed_time/converted_count:.2f} seconds")
 
-if __name__ == "__main__":
-    if len(sys.argv) != 4 or sys.argv[1] in ['-h', '--help']:
-        print("Usage: python image_processing.py <source_directory> <target_directory> <size>")
-        print("\nArguments:")
-        print("  source_directory  : Directory containing the original images")
-        print("  target_directory  : Directory where resized images will be saved")
-        print("  size             : Maximum dimension (width or height) in pixels")
-        print("\nExample:")
-        print("  python image_processing.py ./original_images ./resized_images 800")
-        sys.exit(1)
-    source_directory = sys.argv[1]
-    target_directory = sys.argv[2]
-    size = sys.argv[3]
+'''
+This function removes the images from the target directory that are not in the source directory
+e.g. if the source directory has images a.jpg, b.jpg and the target directory has images a.jpg, b.jpg, b.DNG, c.jpg, c.DNG
+the function will remove c.DNG and c.jpg from the target directory
+'''
+@app.command()
+def clean_up_originals(source_directory: Path, target_directory: Path, raw_extension: str = ".DNG", compressed_extension: str = ".jpg"):
+    # Check if directories exist
+    if not source_directory.is_dir():
+        raise FileNotFoundError(f"Source directory '{source_directory}' does not exist.")
+    if not target_directory.is_dir():
+        raise FileNotFoundError(f"Target directory '{target_directory}' does not exist.")
 
-    resize_images(source_directory, target_directory, size)
+    # Get list of base filenames (without extensions) from source directory
+    source_files = set()
+    for file_path in source_directory.iterdir():
+        if file_path.suffix.lower() == compressed_extension.lower():
+            source_files.add(file_path.stem)
+
+    # Check each file in target directory
+    files_removed = 0
+    removed_files = []
+    for file_path in target_directory.iterdir():
+        if (file_path.suffix.lower() == raw_extension.lower() or 
+            file_path.suffix.lower() == compressed_extension.lower()):
+            if file_path.stem not in source_files:
+                removed_files.append(str(file_path.name))
+                file_path.unlink()
+                files_removed += 1
+
+    print(f"\n=== Cleanup Summary ===")
+    print(f"Files removed: {files_removed}")
+    if files_removed > 0:
+        print("\nRemoved files:")
+        for file in removed_files:
+            print(f"- {file}")
+
+if __name__ == "__main__":
+    app()
